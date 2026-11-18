@@ -1,4 +1,4 @@
-# pi-strata-provider
+# pi-local-model
 
 A lightweight [Pi](https://pi.dev) provider extension that **automatically discovers models** exposed by a local **Strata** OpenAI-compatible server.
 
@@ -35,7 +35,7 @@ It is intentionally **small and dependency-free** — it uses built-in `fetch`, 
 Install with Pi's package manager. From any directory:
 
 ```bash
-pi install C:\Users\matri\.pi\agent\git\github.com\Ayshinko\pi-strata-provider
+pi install C:\AI\State\Pi\agent\git\github.com\Ayshinko\pi-local-model
 ```
 
 or from the checkout directory:

@@ -1,5 +1,5 @@
 {
-	"name": "pi-strata-provider",
+	"name": "pi-local-model",
 	"version": "0.1.0",
 	"description": "A Pi provider extension that dynamically discovers models exposed by a local Strata OpenAI-compatible server.",
 	"type": "module",
