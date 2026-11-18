@@ -27,7 +27,7 @@ function warnUnavailable(models: DiscoveredModel[]): void {
 		if (!isValidLimit(m.maxTokens)) missing.push("max tokens");
 		if (missing.length > 0) {
 			console.warn(
-				`[strata-auto] model "${m.id}" is missing ${missing.join(" and ")} ` +
+				`[localmodel-auto] model "${m.id}" is missing ${missing.join(" and ")} ` +
 					`(not in Strata meta, per-model config, or config.json defaults); it is NOT registered. ` +
 					`Set defaults or a per-model override in config.json to expose it.`,
 			);

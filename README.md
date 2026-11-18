@@ -2,9 +2,10 @@
 
 A lightweight [Pi](https://pi.dev) provider extension that **automatically discovers models** exposed by a local **Strata** OpenAI-compatible server.
 
-It registers a dynamic Pi provider named **`strata-auto`** that queries Strata's `/v1/models` endpoint and makes every returned model available in Pi's `/model` picker — **without you having to hand-edit `models.json` every time Strata loads a new GGUF**.
+It registers a dynamic Pi provider named **`localmodel-auto`** that queries Strata's `/v1/models` endpoint and makes every returned model available in Pi's `/model` picker — **without you having to hand-edit `models.json` every time Strata loads a new GGUF**.
 
-- **Provider id:** `strata-auto`
+- **Provider id:** `localmodel-auto`
+- **Provider display name:** `LocalModel Auto`
 - **Strata endpoint:** `http://127.0.0.1:8080/v1`
 - **API:** OpenAI-compatible (`openai-completions`)
 - **Discovery source:** `GET http://127.0.0.1:8080/v1/models`
@@ -23,7 +24,7 @@ It is intentionally **small and dependency-free** — it uses built-in `fetch`, 
 
 1. On extension load, the package asynchronously queries Strata's `/v1/models`.
 2. Every valid model object returned is mapped to a Pi chat model definition with configurable defaults.
-3. The models are registered under the `strata-auto` provider via `pi.registerProvider(...)`.
+3. The models are registered under the `localmodel-auto` provider via `pi.registerProvider(...)`.
 4. `refreshModels` and the `/strata-refresh` command re-query `/v1/models` and update the catalogue.
 5. Only models **actually reported by Strata** are discoverable. The package does **not** scan `E:\Model`, does **not** infer models from GGUF filenames, and does **not** modify `models.json`.
 
@@ -51,13 +52,13 @@ pi install .
 After installing, either start a new Pi session or run `/reload`. Verify the provider is listed:
 
 ```bash
-pi --extension ./src/index.ts --list-models | grep strata
+pi --extension ./src/index.ts --list-models | grep localmodel-auto
 ```
 
 You should see (at minimum, while `swift-1.5-iq3_xxs` is loaded in Strata):
 
 ```
-strata-auto   swift-1.5-iq3_xxs
+localmodel-auto   swift-1.5-iq3_xxs
 ```
 
 The existing **`strata-local`** provider (from `models.json`) and any other providers (e.g. OpenRouter) are **not** touched.
@@ -110,10 +111,10 @@ Models: 0
 
 ## Selecting a model
 
-Use `/model` and search for the discovered models using the `strata-auto` provider prefix:
+Use `/model` and search for the discovered models using the `localmodel-auto` provider prefix:
 
 ```
-strata-auto/swift-1.5-iq3_xxs
+localmodel-auto/swift-1.5-iq3_xxs
 ```
 
 Think of it like any other provider/model pair (for example `openrouter/some-model`).
@@ -126,8 +127,8 @@ All configuration is optional and lives in a package-local `config.json` next to
 
 ```json
 {
-  "providerId": "strata-auto",
-  "name": "Strata Auto",
+  "providerId": "localmodel-auto",
+  "name": "LocalModel Auto",
   "baseUrl": "http://127.0.0.1:8080/v1",
   "apiKey": "local",
   "api": "openai-completions",
@@ -213,7 +214,7 @@ If a previously successful discovery exists in the current Pi process and Strata
 
 ## Relationship to `strata-local`
 
-Pi separately defines a static **`strata-local`** provider in `~/.pi/agent/models.json`. This extension does **not** modify, replace, or remove that provider — it registers a **new** provider id (`strata-auto`) that lives alongside it. You may keep both while you validate the dynamic provider, then remove `strata-local` from `models.json` yourself if you prefer.
+Pi separately defines a static **`strata-local`** provider in `~/.pi/agent/models.json`. This extension does **not** modify, replace, or remove that provider — it registers a **new** provider id (`localmodel-auto`) that lives alongside it. You may keep both while you validate the dynamic provider, then remove `strata-local` from `models.json` yourself if you prefer.
 
 ---
 

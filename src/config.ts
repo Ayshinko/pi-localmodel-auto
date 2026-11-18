@@ -45,7 +45,7 @@ export interface ModelOverride {
 	thinkingLevelMap?: Record<string, string>;
 }
 
-/** Runtime configuration for the strata-auto provider. */
+/** Runtime configuration for the localmodel-auto provider. */
 export interface StrataConfig {
 	/** Pi provider id (registered with pi.registerProvider). */
 	providerId: string;
@@ -74,8 +74,8 @@ export interface StrataConfig {
  * model-specific limit.
  */
 export const DEFAULT_CONFIG: StrataConfig = {
-	providerId: "strata-auto",
-	name: "Strata Auto",
+	providerId: "localmodel-auto",
+	name: "LocalModel Auto",
 	baseUrl: "http://127.0.0.1:8080/v1",
 	apiKey: "local",
 	api: "openai-completions",

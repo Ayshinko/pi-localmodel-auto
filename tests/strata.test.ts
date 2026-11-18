@@ -47,7 +47,7 @@ const MOCK_CATALOG = {
 // 1. Extension modules import cleanly and defaults load without a config file.
 // ---------------------------------------------------------------------------
 test("modules import and DEFAULT_CONFIG is well-formed", () => {
-	assert.equal(DEFAULT_CONFIG.providerId, "strata-auto");
+	assert.equal(DEFAULT_CONFIG.providerId, "localmodel-auto");
 	assert.equal(DEFAULT_CONFIG.baseUrl, "http://127.0.0.1:8080/v1");
 	// No hardcoded model-limit fallbacks may live in source; config.json is the
 	// single editable source of truth for maxTokens, Strata meta.n_ctx for ctx.
@@ -58,7 +58,7 @@ test("modules import and DEFAULT_CONFIG is well-formed", () => {
 
 test("loadConfig reads the shipped package config.json (BOM-tolerant)", () => {
 	const cfg = loadConfig();
-	assert.equal(cfg.providerId, "strata-auto");
+	assert.equal(cfg.providerId, "localmodel-auto");
 	assert.equal(cfg.defaults.contextWindow, 65536);
 	assert.equal(cfg.defaults.maxTokens, 32768);
 });
@@ -205,7 +205,7 @@ test("per-model overrides override defaults", () => {
 
 test("config.json merge respects user values", () => {
 	const cfg = loadConfig("tests/fixtures/config.json");
-	assert.equal(cfg.providerId, "strata-auto");
+	assert.equal(cfg.providerId, "localmodel-auto");
 	assert.equal(cfg.defaults.contextWindow, 100000);
 	assert.equal(cfg.defaults.maxTokens, 32000);
 	assert.equal(cfg.timeoutMs, 1500);
