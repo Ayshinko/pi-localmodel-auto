@@ -35,7 +35,7 @@ It is intentionally **small and dependency-free** — it uses built-in `fetch`, 
 Install with Pi's package manager. From any directory:
 
 ```bash
-pi install C:\AI\State\Pi\agent\git\github.com\Ayshinko\pi-localmodel-auto
+pi install git:github.com/Ayshinko/pi-localmodel-auto
 ```
 
 or from the checkout directory:
