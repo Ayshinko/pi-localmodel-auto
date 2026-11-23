@@ -121,6 +121,60 @@ Think of it like any other provider/model pair (for example `openrouter/some-mod
 
 ---
 
+## Stable alias for configs: `localmodel-auto/current`
+
+Strata serves one model at a time, and that model's id changes whenever you load a
+different checkpoint or quantization (`qwen3.8-flash-next-iq3_s` becomes
+`qwen3.8-flash-next-unsloth-ud-iq4_xs-v31`). Pinning anything to that id — `settings.json`
+`defaultModel` and `subagents.agentOverrides`, `agents/*.md` frontmatter,
+`hermes-memory-config.json` `llmModelOverride` — means editing several files after every swap.
+
+So this package also registers a **virtual model** (Pi 1.6+): a stable catalog entry you can
+select like any model, which never reaches Strata. Before each request it resolves which
+physical Strata model is registered right now and dispatches to that one, so the request body
+carries the real id and Strata's model-name check still passes.
+
+Use it anywhere a model id is expected:
+
+```
+localmodel-auto/current
+```
+
+| Where | What you see |
+| --- | --- |
+| selection (`/model`, `PI_MODEL`, `model_change` entries) | `localmodel-auto/current` |
+| dispatched (assistant messages, what Strata logs) | whatever Strata is serving at that moment |
+
+Because the *selection* never changes, swapping the loaded model keeps prompt caches, resumed
+sessions, subagent pins, and background-review pins working — no config edits and no Pi restart.
+
+### Alias fields
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `virtual.enabled` | `true` | Set `false` to register only the discovered physical models. |
+| `virtual.id` | `current` | The stable id under `providerId`. Must not equal a Strata model id, or the physical model wins and the alias logs a warning. |
+| `virtual.name` | `Strata (current)` | Display name in `/model`. |
+| `virtual.thinkingLevels` | all 7 levels | Levels offered for the alias; unknown values are dropped with a warning. Pi clamps to the routed model. |
+| `virtual.contextWindow` / `virtual.maxTokens` | unset | Only the limits shown before the first routed response; afterwards Pi uses the routed model's limits. Nothing is invented in code. |
+| `virtual.preferredModel` | unset | Substring (case-insensitive) hint used when Strata lists several models. |
+| `virtual.autoRefreshProbeMs` | `5000` | Minimum ms between the live `/v1/models` probes `route()` makes, so a swap is picked up on the next user turn. `0` disables probing (then use `/strata-refresh` or restart Pi). |
+
+If nothing is registered for the provider (Strata still loading, or offline), the alias reports
+which target it could not find instead of failing with a bare 404.
+
+### Caveats
+
+- A Pi session that started **before** this feature was loaded has no alias in its model
+  registry, so launching a subagent pinned to it fails with
+  `Unknown subagent model 'localmodel-auto/current'`. Restart Pi (or open a new session) after
+  upgrading the extension.
+- Dispatch is deliberately *not* sticky to the previously answered model: after a swap, the next
+  request uses the new model even mid-conversation. The old id would otherwise 404 against a
+  server that no longer serves it.
+
+---
+
 ## Configuration
 
 All configuration is optional and lives in a package-local `config.json` next to `package.json`. If the file is absent, sensible defaults are used, so **no configuration is required** for normal operation.
@@ -145,7 +199,14 @@ All configuration is optional and lives in a package-local `config.json` next to
       "high": "high", "xhigh": "high", "max": "high"
     }
   },
-  "models": {}
+  "models": {},
+  "virtual": {
+    "enabled": true,
+    "id": "current",
+    "name": "Strata (current)",
+    "thinkingLevels": ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
+    "autoRefreshProbeMs": 5000
+  }
 }
 ```
 

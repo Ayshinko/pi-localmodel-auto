@@ -45,6 +45,45 @@ export interface ModelOverride {
 	thinkingLevelMap?: Record<string, string>;
 }
 
+/**
+ * Configuration for the stable alias model (`localmodel-auto/current`).
+ *
+ * The alias is a Pi *virtual* model: it is selectable in `/model`, `--model`,
+ * settings, and subagent configs, but it never reaches Strata. `route()` picks
+ * the physical Strata model registered under the provider id, so every request
+ * carries the id Strata actually serves. That makes configs provider-stable:
+ * swapping the loaded model or its quantization needs no config edits.
+ */
+export interface VirtualModelConfig {
+	/** Register the alias. Set false to keep provider-only behaviour. */
+	enabled: boolean;
+	/** Stable model id under `providerId`. Keep it distinct from any Strata model id. */
+	id: string;
+	/** Display name for the alias in `/model`. */
+	name: string;
+	/** Thinking levels offered for the alias selection; unknown values are dropped. */
+	thinkingLevels: string[];
+	/**
+	 * Limits shown for the alias before its first routed response. Unset means
+	 * "unknown"; afterwards Pi uses the routed model's limits, so these are only
+	 * a display/first-turn fallback and never invent a value in code.
+	 */
+	contextWindow?: number;
+	/** See `contextWindow`. */
+	maxTokens?: number;
+	/**
+	 * Substring hint (case-insensitive) used to pick one model when Strata lists
+	 * several. Unused when exactly one model is registered.
+	 */
+	preferredModel?: string;
+	/**
+	 * Minimum ms between live `/v1/models` probes made by `route()`, so a Strata
+	 * model swap is picked up without editing config or running `/strata-refresh`.
+	 * 0 disables probing (then `/strata-refresh` or a Pi restart is required).
+	 */
+	autoRefreshProbeMs: number;
+}
+
 /** Runtime configuration for the localmodel-auto provider. */
 export interface StrataConfig {
 	/** Pi provider id (registered with pi.registerProvider). */
@@ -63,6 +102,8 @@ export interface StrataConfig {
 	defaults: ModelDefaults;
 	/** Per-model overrides keyed by model id. */
 	models: Record<string, ModelOverride>;
+	/** Stable alias model (`localmodel-auto/<virtual.id>`) configuration. */
+	virtual: VirtualModelConfig;
 }
 
 /**
@@ -98,6 +139,14 @@ export const DEFAULT_CONFIG: StrataConfig = {
 		},
 	},
 	models: {},
+	virtual: {
+		enabled: true,
+		id: "current",
+		name: "Strata (current)",
+		thinkingLevels: ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
+		preferredModel: undefined,
+		autoRefreshProbeMs: 5000,
+	},
 };
 
 /**
@@ -120,7 +169,12 @@ export function loadConfig(configPath?: string): StrataConfig {
 		}
 	}
 	if (!raw || typeof raw !== "object") {
-		return { ...DEFAULT_CONFIG, defaults: { ...DEFAULT_CONFIG.defaults }, models: {} };
+		return {
+			...DEFAULT_CONFIG,
+			defaults: { ...DEFAULT_CONFIG.defaults },
+			models: {},
+			virtual: { ...DEFAULT_CONFIG.virtual },
+		};
 	}
 	return mergeConfig(DEFAULT_CONFIG, raw as Record<string, unknown>);
 }
@@ -149,6 +203,7 @@ function mergeConfig(base: StrataConfig, raw: Record<string, unknown>): StrataCo
 			cost: { ...base.defaults.cost },
 		},
 		models: {},
+		virtual: { ...base.virtual },
 	};
 	if (raw.defaults && typeof raw.defaults === "object") {
 		const d = raw.defaults as Record<string, unknown>;
@@ -162,6 +217,20 @@ function mergeConfig(base: StrataConfig, raw: Record<string, unknown>): StrataCo
 		if (d.compat && typeof d.compat === "object") merged.defaults.compat = d.compat as Record<string, unknown>;
 		if (d.thinkingLevelMap && typeof d.thinkingLevelMap === "object")
 			merged.defaults.thinkingLevelMap = d.thinkingLevelMap as Record<string, string>;
+	}
+	if (raw.virtual && typeof raw.virtual === "object") {
+		const v = raw.virtual as Record<string, unknown>;
+		if (v.enabled !== undefined) merged.virtual.enabled = bool(v.enabled, base.virtual.enabled);
+		if (v.id !== undefined) merged.virtual.id = str(v.id, base.virtual.id);
+		if (v.name !== undefined) merged.virtual.name = str(v.name, base.virtual.name);
+		if (Array.isArray(v.thinkingLevels))
+			merged.virtual.thinkingLevels = v.thinkingLevels.filter((level): level is string => typeof level === "string" && level.length > 0);
+		if (v.contextWindow !== undefined) merged.virtual.contextWindow = numOrUndefined(v.contextWindow);
+		if (v.maxTokens !== undefined) merged.virtual.maxTokens = numOrUndefined(v.maxTokens);
+		if (v.preferredModel !== undefined)
+			merged.virtual.preferredModel =
+				typeof v.preferredModel === "string" && v.preferredModel.trim().length > 0 ? v.preferredModel.trim() : undefined;
+		if (v.autoRefreshProbeMs !== undefined) merged.virtual.autoRefreshProbeMs = num(v.autoRefreshProbeMs, base.virtual.autoRefreshProbeMs);
 	}
 	if (raw.models && typeof raw.models === "object") {
 		for (const [id, ov] of Object.entries(raw.models as Record<string, unknown>)) {

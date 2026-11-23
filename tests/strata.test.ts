@@ -15,6 +15,7 @@ import {
 	type DiscoveredModel,
 } from "../src/discovery.ts";
 import { humanizeModelId } from "../src/names.ts";
+import { catalogMismatch, selectAliasTarget } from "../src/alias.ts";
 import { DEFAULT_CONFIG, loadConfig } from "../src/config.ts";
 
 /** Replace global fetch for the duration of a test; returns a restore fn. */
@@ -331,4 +332,111 @@ test("live: real Strata /v1/models is queried", { skip: !process.env.STRATA_LIVE
 		assert.equal(typeof m.id, "string");
 		if (isValidLimit(m.contextWindow)) assert.ok(m.contextWindow > 0);
 	}
+});
+
+// ---------------------------------------------------------------------------
+// Alias selection (src/alias.ts) — the stable localmodel-auto/<id> routing.
+// ---------------------------------------------------------------------------
+
+test("alias: exactly one registered model is chosen without ambiguity", () => {
+	const selection = selectAliasTarget([{ id: "qwen3.8-flash-next-unsloth-ud-iq4_xs-v31" }]);
+	assert.deepEqual(selection, { id: "qwen3.8-flash-next-unsloth-ud-iq4_xs-v31", ambiguous: false });
+});
+
+test("alias: no registered model yields no selection", () => {
+	assert.equal(selectAliasTarget([]), undefined);
+	assert.equal(selectAliasTarget([{ id: "  " }] as never[]), undefined);
+});
+
+test("alias: preferredModel picks by case-insensitive substring", () => {
+	const models = [{ id: "aaa-iq2_0" }, { id: "qwen3.8-flash-next-iq3_s" }, { id: "zzz-mlx" }];
+	const selection = selectAliasTarget(models, "IQ3_s");
+	assert.deepEqual(selection, { id: "qwen3.8-flash-next-iq3_s", ambiguous: false });
+});
+
+test("alias: several models and no preference pick the first sorted id and flag ambiguity", () => {
+	const selection = selectAliasTarget([{ id: "zzz" }, { id: "aaa" }, { id: "mmm" }]);
+	assert.deepEqual(selection, { id: "aaa", ambiguous: true });
+});
+
+test("alias: a preferredModel that matches nothing still routes (never throws)", () => {
+	const selection = selectAliasTarget([{ id: "zzz" }, { id: "aaa" }], "does-not-exist");
+	assert.deepEqual(selection, { id: "aaa", ambiguous: true });
+});
+
+test("catalogMismatch: detects a Strata swap but not an offline/empty probe", () => {
+	assert.equal(catalogMismatch(["new-model"], ["old-model"]), true);
+	assert.equal(catalogMismatch(["same"], ["same"]), false);
+	assert.equal(catalogMismatch(["b", "a"], ["a", "b"]), false, "order does not matter");
+	assert.equal(catalogMismatch([], ["old-model"]), false, "empty live list means nothing to compare");
+	assert.equal(catalogMismatch(["a", "b"], ["a"]), true);
+	assert.equal(catalogMismatch(["a"], ["a", "b"]), true);
+});
+
+test("alias config: defaults are provider-stable and probing is on", () => {
+	assert.equal(DEFAULT_CONFIG.virtual.enabled, true);
+	assert.equal(DEFAULT_CONFIG.virtual.id, "current");
+	assert.equal(DEFAULT_CONFIG.virtual.autoRefreshProbeMs, 5000);
+	assert.ok(DEFAULT_CONFIG.virtual.thinkingLevels.includes("low"));
+	// No hardcoded model ids: the alias must not name a quantization.
+	assert.ok(!/iq[0-9]|q[0-9]_|unsloth/i.test(DEFAULT_CONFIG.virtual.id));
+});
+
+test("alias config: shipped config.json declares the alias", () => {
+	const cfg = loadConfig();
+	assert.equal(cfg.virtual.enabled, true);
+	assert.equal(cfg.virtual.id, "current");
+	assert.equal(cfg.virtual.name.length > 0, true);
+});
+
+test("alias config: virtual overrides from a custom config.json win over defaults", () => {
+	const dir = mkdtempSync(join(tmpdir(), "alias-config-"));
+	const file = join(dir, "config.json");
+	writeFileSync(
+		file,
+		JSON.stringify({
+			virtual: {
+				enabled: false,
+				id: "live",
+				name: "Live",
+				thinkingLevels: ["low", "bogus"],
+				contextWindow: 131072,
+				maxTokens: 8192,
+				preferredModel: "iq3",
+				autoRefreshProbeMs: 0,
+			},
+		}),
+	);
+	try {
+		const cfg = loadConfig(file);
+		assert.equal(cfg.virtual.enabled, false);
+		assert.equal(cfg.virtual.id, "live");
+		assert.equal(cfg.virtual.name, "Live");
+		assert.deepEqual(cfg.virtual.thinkingLevels, ["low", "bogus"]);
+		assert.equal(cfg.virtual.contextWindow, 131072);
+		assert.equal(cfg.virtual.maxTokens, 8192);
+		assert.equal(cfg.virtual.preferredModel, "iq3");
+		assert.equal(cfg.virtual.autoRefreshProbeMs, 0);
+		// Defaults untouched when virtual is absent.
+		const plain = loadConfig(join(dir, "missing.json"));
+		assert.equal(plain.virtual.id, "current");
+		assert.equal(plain.virtual.enabled, true);
+		// Mutating a loaded config must not leak into DEFAULT_CONFIG.
+		cfg.virtual.id = "mutated";
+		assert.equal(loadConfig(join(dir, "missing.json")).virtual.id, "current");
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+test("alias: extension registers the virtual alias and never hardcodes a quantization in the id", () => {
+	const source = readFileSync(resolve(import.meta.dirname, "../src/index.ts"), "utf8").replace(/\r\n/g, "\n");
+	assert.ok(source.includes("pi.registerVirtualModel("), "index.ts must register the alias as a virtual model");
+	assert.ok(source.includes("registerAliasModel(pi)"), "the alias registration must run at activation");
+	assert.ok(source.includes("VIRTUAL_MODEL_API"), "route() must skip virtual catalog entries when picking a target");
+	// The alias id itself lives in config.json (single source of truth), not in code.
+	const configText = readFileSync(resolve(import.meta.dirname, "../config.json"), "utf8");
+	const parsed = JSON.parse(configText.replace(/^\uFEFF/, ""));
+	assert.equal(parsed.virtual.id, "current");
+	assert.ok(!/iq[0-9]|q[0-9]_|unsloth/i.test(parsed.virtual.id));
 });

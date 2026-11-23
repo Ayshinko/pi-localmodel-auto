@@ -29,5 +29,12 @@
 			"max": "high"
 		}
 	},
-	"models": {}
+	"models": {},
+	"virtual": {
+		"enabled": true,
+		"id": "current",
+		"name": "Strata (current)",
+		"thinkingLevels": ["off", "minimal", "low", "medium", "high", "xhigh", "max"],
+		"autoRefreshProbeMs": 5000
+	}
 }
